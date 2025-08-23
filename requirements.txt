@@ -1,0 +1,27 @@
+# Core
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.1
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# Spark (local mode, for distributed preprocessing/training)
+pyspark==3.5.1
+
+# MLOps stack
+mlflow==2.15.1
+dvc[all]==3.50.2   # DVC with all remotes (local, s3, gdrive, etc.)
+
+# API deployment
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+
+# Drift detection (choose one: Evidently OR River)
+evidently==0.4.38
+river==0.21.1
+
+# Jupyter (optional but useful for notebooks)
+notebook==7.2.2
+jupyterlab==4.2.5
+ipykernel==6.29.5
