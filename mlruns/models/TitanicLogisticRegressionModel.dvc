@@ -1,0 +1,6 @@
+outs:
+- md5: 95d78747b7782ae3a8d03f385f9da0b3.dir
+  size: 7956
+  nfiles: 22
+  hash: md5
+  path: TitanicLogisticRegressionModel

@@ -1,0 +1,6 @@
+outs:
+- md5: 2d1625416dca3f89ff05e42bea100286.dir
+  size: 27756
+  nfiles: 44
+  hash: md5
+  path: preprocessing_pipeline
