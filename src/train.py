@@ -14,6 +14,10 @@ from sklearn.metrics import confusion_matrix
 from mlflow.models.signature import infer_signature
 
 
+import os
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
+
+
 spark = SparkSession.builder \
     .appName("Titanic Dataset Training") \
     .config("spark.executor.memory", "8g") \
@@ -25,7 +29,7 @@ train_df = spark.read.parquet("data/processed/train_features.parquet", header=Tr
 # train_with_features = pip
 val_df = spark.read.parquet("data/processed/val_features.parquet", header=True, inferSchema=True)
 
-print("tEST fEATURES ",val_df.columns)
+print("Test Features ",val_df.columns)
 
 
 lr = LogisticRegression(featuresCol = "features",labelCol="Survived")
@@ -56,6 +60,8 @@ cv = CrossValidator(
 )
 
 mlflow.set_experiment("Titanic-Project")
+
+mlflow.set_registry_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
 
 model_name ="TitanicLogisticRegressionModel"
 with mlflow.start_run(run_name="LogisticRegression-CVrun"):
@@ -129,6 +135,7 @@ with mlflow.start_run(run_name="LogisticRegression-CVrun"):
     #best model
     mlflow.spark.log_model(bestModel, artifact_path = "model", registered_model_name=model_name)
     
+    
     sample_features = val_df.select("features").first()["features"]
     input_example = pd.DataFrame([sample_features.toArray()], 
                                 columns=[f"feature_{i}" for i in range(len(sample_features))])
@@ -156,12 +163,6 @@ with mlflow.start_run(run_name="LogisticRegression-CVrun"):
         prod_run_id = prod_model[0].run_id
         prod_metrics = client.get_run(prod_run_id).data.metrics
         current_prod_auc = prod_metrics.get("Test_AUC",0)
-        # current_prod_version = prod_model[0].version
-        # prod_model_uri = f"models:/{model_name}/Production"
-        # #load production model
-        # current_prod_model = mlflow.spark.load_model(prod_model_uri)
-        # prod_predictions = current_prod_model.transform(test_df)
-        # current_prod_auc = binaryEvaluator.evaluate(prod_predictions)
         
         if auc > current_prod_auc:
             print(f"New model AUC {auc:.4f} > Production AUC {current_prod_auc:.4f} So promoting to Production")
@@ -184,4 +185,4 @@ with mlflow.start_run(run_name="LogisticRegression-CVrun"):
         )
         
         
-spark.stop()
+# spark.stop()

@@ -2,6 +2,7 @@ import mlflow.spark
 import pyspark
 from pyspark.sql import SparkSession
 from pyspark.ml import PipelineModel
+import os
 
 spark = SparkSession.builder \
     .appName("Titanic Model Deployment") \
@@ -9,6 +10,10 @@ spark = SparkSession.builder \
     .config("spark.executor.cores", "8") \
     .config("spark.hadoop.io.native.lib.available", "false") \
     .getOrCreate()
+
+# mlflow.set_tracking_uri("file:///app/mlruns")
+
+mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
 
 model_name = "TitanicLogisticRegressionModel"
 model_uri = f"models:/{model_name}/Production"

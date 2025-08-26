@@ -1,0 +1,4 @@
+[core]
+    remote = titanic_dvc_remote
+['remote "titanic_dvc_remote"']
+    url = /mnt/d/dvc_remote_cache/
