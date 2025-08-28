@@ -17,6 +17,8 @@ from mlflow.models.signature import infer_signature
 import os
 mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
 
+mlruns_path = "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"
+# mlflow.set_tracking_uri(mlruns_path)
 
 spark = SparkSession.builder \
     .appName("Titanic Dataset Training") \
@@ -61,10 +63,10 @@ cv = CrossValidator(
 
 mlflow.set_experiment("Titanic-Project")
 
-mlflow.set_registry_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
 
-model_name ="TitanicLogisticRegressionModel"
-with mlflow.start_run(run_name="LogisticRegression-CVrun"):
+mlflow.set_registry_uri(mlruns_path)
+model_name ="TitanicLogisticRegression"
+with mlflow.start_run(run_name="LogisticRegression"):
     
 
     cvModel = cv.fit(train_df)
@@ -185,4 +187,4 @@ with mlflow.start_run(run_name="LogisticRegression-CVrun"):
         )
         
         
-# spark.stop()
+spark.stop()

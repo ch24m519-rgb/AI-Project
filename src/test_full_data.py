@@ -2,6 +2,7 @@ import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.ml import PipelineModel
 import mlflow.spark
+import os
 
 spark = SparkSession.builder \
     .appName("TItanic Batch Prediction") \
@@ -11,6 +12,10 @@ spark = SparkSession.builder \
     .getOrCreate()
     
 spark.sparkContext.setLogLevel("ERROR")    
+
+mlruns_path = os.getenv("MLFLOW_TRACKING_URI", "file:///app/mlruns")
+mlflow.set_tracking_uri(mlruns_path)
+mlflow.set_registry_uri(mlruns_path)
 
 test_df = spark.read.csv("data/raw/test.csv", header = True, inferSchema = True)
 

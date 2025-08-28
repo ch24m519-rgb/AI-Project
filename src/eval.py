@@ -11,12 +11,17 @@ spark = SparkSession.builder \
     .config("spark.hadoop.io.native.lib.available", "false") \
     .getOrCreate()
 
-# mlflow.set_tracking_uri("file:///app/mlruns")
 
-mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
+# mlruns_path = os.getenv("MLFLOW_TRACKING_URI", "file:///app/mlruns")
+# mlflow.set_tracking_uri(mlruns_path)
+# mlflow.set_registry_uri(mlruns_path)
 
-model_name = "TitanicLogisticRegressionModel"
-model_uri = f"models:/{model_name}/Production"
+
+model_name = "TitanicLogisticRegression"
+# model_uri = f"models:/{model_name}/Production"
+# loaded_model = mlflow.spark.load_model(model_uri)
+# print("Message: ", model_uri)
+model_uri = "file:///app/mlruns/939557732492343672/0f23703e3a4a4ac59df507ba266e25df/artifacts/model"
 loaded_model = mlflow.spark.load_model(model_uri)
 
 

@@ -1,49 +1,46 @@
-FROM eclipse-temurin:11-jre-jammy
+# Dockerfile
+FROM python:3.10-slim
 
-# Set environment variables for Spark and MLflow.
-# These will configure the Spark application inside the container.
-ENV SPARK_HOME=/opt/spark
-ENV PATH="${PATH}:${SPARK_HOME}/bin"
-ENV DOCKER_ENV=1
-ENV MLFLOW_TRACKING_URI=file:///app/mlruns
+ARG DEBIAN_FRONTEND=noninteractive
 
-# Set the working directory inside the container
-WORKDIR /app
+# Bash (Spark scripts), ps (procps), tini, certificates, and Java (JRE)
+# Try Java 17 first; if not available, fall back to distro default JRE.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends bash procps tini ca-certificates wget; \
+    (apt-get install -y --no-install-recommends openjdk-11-jre-headless) \
+    || (apt-get install -y --no-install-recommends default-jre-headless); \
+    rm -rf /var/lib/apt/lists/*
 
+# Detect JAVA_HOME dynamically (don’t hardcode paths)
+RUN JAVA_BIN="$(readlink -f "$(which java)")"; \
+    JAVA_HOME="$(dirname "$(dirname "$JAVA_BIN")")"; \
+    echo "export JAVA_HOME=$JAVA_HOME" > /etc/profile.d/java.sh
 
-# Install system dependencies, including Java for Spark
-RUN apt-get update && \
-    apt-get install -y wget python3 python3-pip python3-dev && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Download and install Spark
-RUN wget https://archive.apache.org/dist/spark/spark-3.3.0/spark-3.3.0-bin-hadoop3.tgz -O /tmp/spark.tgz && \
-    tar -xzf /tmp/spark.tgz -C /opt && \
-    ln -s /opt/spark-3.3.0-bin-hadoop3 ${SPARK_HOME} && \
-    rm /tmp/spark.tgz
-
-
-# Install Python dependencies (copy requirements file)
+# Python deps
+RUN pip cache purge
+RUN pip install --default-timeout=360 --no-cache-dir pyspark==3.5.1 mlflow fastapi uvicorn
 COPY requirements.txt .
 RUN pip3 install --default-timeout=120 --no-cache-dir -r requirements.txt
 
-# Copy all project files into the container
-# This includes src/and the models/ directory
+# Spark networking niceties for Docker/WSL
+ENV SPARK_DRIVER_BIND_ADDRESS=127.0.0.1 \
+    SPARK_LOCAL_IP=127.0.0.1 \
+    SPARK_LOCAL_HOSTNAME=localhost \
+    PYSPARK_PYTHON=python \
+    PYSPARK_DRIVER_PYTHON=python
 
+ENV MLFLOW_TRACKING_URI=file:///app/mlruns
+
+WORKDIR /app
 COPY src/ src/
 COPY models/ models/
 
 COPY data/raw/ data/raw/
 COPY data/processed/ data/processed/
+COPY mlruns/ mlruns/
 
-
-# Expose the port the Flask app will run on
+# ENTRYPOINT ["/usr/bin/tini", "--"]
+# CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 EXPOSE 5000
-
-# Set the command to run the application
-# This is the entry point for your API
-
-CMD ["python3"]     
-#, "src/titanic_preprocess.py"]
-# CMD ["python3", "src/train.py"]
-# CMD ["python3", "src/eval.py"]
+CMD ["python3", "src/eval.py"]
