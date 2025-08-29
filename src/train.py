@@ -15,12 +15,12 @@ from mlflow.models.signature import infer_signature
 import numpy as np
 
 import os
+
 # mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
-mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
 
-mlruns_path = "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"
+# mlruns_path = "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"
 
-
+mlflow.set_tracking_uri("http://127.0.0.1:5000")
 
 spark = SparkSession.builder \
     .appName("Titanic Dataset Training") \
@@ -68,8 +68,8 @@ from pyspark.ml.classification import RandomForestClassifier
 
 rf = RandomForestClassifier(featuresCol="features", labelCol="Survived")
 paramGrid_rf = ParamGridBuilder() \
-    .addGrid(rf.numTrees, [20, 50, 100]) \
-    .addGrid(rf.maxDepth, [5, 10]) \
+    .addGrid(rf.numTrees, [20]) \
+    .addGrid(rf.maxDepth, [5, 6]) \
     .build()
 
 cv_rf = CrossValidator(
@@ -84,8 +84,8 @@ from pyspark.ml.classification import DecisionTreeClassifier
 
 dt = DecisionTreeClassifier(featuresCol="features", labelCol="Survived")
 paramGrid_dt = ParamGridBuilder() \
-    .addGrid(dt.maxDepth, [3, 5, 10]) \
-    .addGrid(dt.minInstancesPerNode, [1, 5, 10]) \
+    .addGrid(dt.maxDepth, [3]) \
+    .addGrid(dt.minInstancesPerNode, [1, 2]) \
     .build()
 
 cv_dt = CrossValidator(
@@ -100,8 +100,8 @@ from pyspark.ml.classification import GBTClassifier
 
 gbt = GBTClassifier(featuresCol="features", labelCol="Survived")
 paramGrid_gbt = ParamGridBuilder() \
-    .addGrid(gbt.maxIter, [20, 50]) \
-    .addGrid(gbt.maxDepth, [3, 5]) \
+    .addGrid(gbt.maxIter, [20]) \
+    .addGrid(gbt.maxDepth, [2, 3]) \
     .build()
 
 cv_gbt = CrossValidator(
@@ -233,15 +233,30 @@ best_entry = max(all_results, key=lambda x: x["auc"])
 best_model_name = best_entry["model_name"]
 best_run_id = best_entry["run_id"]
 best_model = best_entry["model"]
+auc = best_entry["auc"]
 
 # Register and promote only the best model
+# model_uri = "models:/TitanicBestClassifier/Production"
 model_uri = f"runs:/{best_run_id}/model"
 registered_model = mlflow.register_model(model_uri, best_model_name)
 
 
+output_path = "models/Classifier"
+best_model.write().overwrite().save(output_path)
+print(f"\nBest model ({best_model.__class__.__name__}) saved to {output_path}")
+
 
 #MOdel Production
 client = MlflowClient()
+
+
+# mlflow.spark.log_model(
+#             spark_model=best_model,
+#             artifact_path="Best-Classifier",
+#             registered_model_name="TitanicBestClassifier"
+#         )
+# print("Best model has been registered in the MLflow Model Registry.")
+
 client.transition_model_version_stage(
     name=best_model_name,
     version=registered_model.version,
