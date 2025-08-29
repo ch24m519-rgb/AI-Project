@@ -1,4 +1,6 @@
 [core]
-    remote = titanic_dvc_remote
+    remote = local_storage
 ['remote "titanic_dvc_remote"']
     url = /mnt/d/dvc_remote_cache/
+['remote "local_storage"']
+    url = /mnt/d/wsl_trim3_project/dvc_local_remote_storage/
