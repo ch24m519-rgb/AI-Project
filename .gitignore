@@ -1,0 +1,13 @@
+*.png
+
+# Ignore Python workspace and artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.ipynb_checkpoints/
+
+# Ignore DVC cache and temp
+.cache/
+/models
+/mlartifacts
+/mlruns

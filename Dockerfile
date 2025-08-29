@@ -42,5 +42,5 @@ COPY mlruns/ mlruns/
 
 # ENTRYPOINT ["/usr/bin/tini", "--"]
 # CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-EXPOSE 5000
-CMD ["python3", "src/eval.py"]
+EXPOSE 5050
+CMD ["uvicorn", "src.eval:app", "--host", "0.0.0.0", "--port", "5050"]

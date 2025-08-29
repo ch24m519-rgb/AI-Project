@@ -24,4 +24,5 @@ response = requests.post(url, data=json_data, headers={'Content-Type': 'applicat
 if response.status_code == 200:
     print("Prediction: ", response.json()['prediction'])
 else:
-    print("Error: ", response.json()['error'])
+    error_msg = response.json().get('error', response.text)
+    print("Error: ", error_msg)

@@ -1,9 +1,10 @@
 import subprocess
 import os
 from drift_detector import detect_raw_drift
+from titanic_preprocess import run_preprocessing
+from train import run_training
 
-
-def run_pipeline():
+def run_pipeline(file_path):
     """
     Orchestrates the data preprocessing and model training pipeline.
     """
@@ -12,12 +13,14 @@ def run_pipeline():
         
         # 1. Run data preprocessing script
         print("1.Running Data Preprocessing")
-        subprocess.run(["python", "src/titanic_preprocess.py"], check=True)
+        run_preprocessing(file_path)
+        # subprocess.run(["python", "src/titanic_preprocess.py"], check=True)
         print("Data Processing Completed")
         
         # 2. Run Traing 
         print("Running Model Training")
-        subprocess.run(["python", "src/train.py"], check=True)
+        run_training()
+        # subprocess.run(["python", "src/train.py"], check=True)
         print("Model Training & Deployment Completed")
         
         print("*** AUtomated Retraining Pipeline finished Successfully ***")
@@ -39,6 +42,6 @@ if __name__ == "__main__":
     
     if drift_detected:
         print("!!! ALERT! Drift Detected. Retraining Pipeline will now run.")
-        run_pipeline()
+        run_pipeline(file_path = new_data_path)
     else:
         print("No Drift Detected. Retraining is not necessary")

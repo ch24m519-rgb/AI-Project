@@ -6,6 +6,7 @@ import os
 from mlflow.tracking import MlflowClient
 from pyspark.ml import PipelineModel
 from pyspark.ml.classification import GBTClassificationModel, RandomForestClassificationModel, DecisionTreeClassificationModel, LogisticRegressionModel
+import uvicorn
 
 spark = SparkSession.builder \
     .appName("Titanic Model Deployment") \
@@ -15,9 +16,6 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 
-
-# mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
-# mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///app/mlruns"))
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
 
 model_path = "models/Classifier"
@@ -48,13 +46,27 @@ def preprocess_data(data):
     return processed_data
 
 
-"""
-creating API with Flask
-"""
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
+from typing import Optional
 
-app = Flask(__name__)
+app = FastAPI()
+
+# Define Pydantic model for input validation
+class Passenger(BaseModel):
+    PassengerId: int
+    Pclass: int
+    Name: Optional[str] = None
+    Sex: Optional[str] = None
+    Age: Optional[float] = None
+    SibSp: Optional[int] = None
+    Parch: Optional[int] = None
+    Ticket: Optional[str] = None
+    Fare: Optional[float] = None
+    Cabin: Optional[str] = None
+    Embarked: Optional[str] = None
 
 input_schema = StructType([
     StructField("PassengerId", IntegerType(), True),
@@ -70,78 +82,31 @@ input_schema = StructType([
     StructField("Embarked", StringType(), True)
 ])
 
-#API endpoint
-@app.route("/predict", methods=["POST"])
-def predict():
+@app.post("/predict")
+async def predict(passenger: Passenger):
     try:
-        raw_data = request.json
+        # Convert Pydantic model to dict and create Spark DataFrame
+        raw_data = passenger.dict()
         raw_df = spark.createDataFrame([raw_data], schema=input_schema)
-        
+
+        # Preprocess and predict
         processed_df = preprocessing_pipiline.transform(raw_df)
-        
         predictions = loaded_model.transform(processed_df)
-        
         result = predictions.select("prediction").first()["prediction"]
         
-        return jsonify({"prediction": int(result)})
+        status = "Survived" if result == 1 else "Not-Survived"
+
+        return {
+            "prediction": int(result),
+            "Survived" : status        
+        }
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
 
-# spark.stop()
 
-# from fastapi import FastAPI, HTTPException
-# from pydantic import BaseModel
-# from pyspark.sql import SparkSession
-# from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType
-
-# app = FastAPI()
-
-# # Define Pydantic model for input validation
-# class Passenger(BaseModel):
-#     PassengerId: int
-#     Pclass: int
-#     Name: str
-#     Sex: str
-#     Age: float
-#     SibSp: int
-#     Parch: int
-#     Ticket: str
-#     Fare: float
-#     Cabin: str
-#     Embarked: str
-
-# input_schema = StructType([
-#     StructField("PassengerId", IntegerType(), True),
-#     StructField("Pclass", IntegerType(), True),
-#     StructField("Name", StringType(), True),
-#     StructField("Sex", StringType(), True),
-#     StructField("Age", DoubleType(), True),
-#     StructField("SibSp", IntegerType(), True),
-#     StructField("Parch", IntegerType(), True),
-#     StructField("Ticket", StringType(), True),
-#     StructField("Fare", DoubleType(), True),
-#     StructField("Cabin", StringType(), True),
-#     StructField("Embarked", StringType(), True)
-# ])
-
-# @app.post("/predict")
-# async def predict(passenger: Passenger):
-#     try:
-#         # Convert Pydantic model to dict and create Spark DataFrame
-#         raw_data = passenger.dict()
-#         raw_df = spark.createDataFrame([raw_data], schema=input_schema)
-
-#         # Preprocess and predict
-#         processed_df = preprocessing_pipiline.transform(raw_df)
-#         predictions = loaded_model.transform(processed_df)
-#         result = predictions.select("prediction").first()["prediction"]
-
-#         return {"prediction": int(result)}
-#     except Exception as e:
-#         raise HTTPException(status_code=400, detail=str(e))
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port = 5050)
+    uvicorn.run("eval:app", host="0.0.0.0", port=5050, reload=True)
 
 
