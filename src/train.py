@@ -12,13 +12,15 @@ import seaborn as sns
 import pandas as pd
 from sklearn.metrics import confusion_matrix
 from mlflow.models.signature import infer_signature
-
+import numpy as np
 
 import os
+# mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
 mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"))
 
 mlruns_path = "file:///mnt/d/wsl_trim3_project/project_titanic/mlruns"
-# mlflow.set_tracking_uri(mlruns_path)
+
+
 
 spark = SparkSession.builder \
     .appName("Titanic Dataset Training") \
@@ -53,7 +55,7 @@ evaluator = MulticlassClassificationEvaluator(
     predictionCol = "prediction"    
 )
 
-cv = CrossValidator(
+cv_lr = CrossValidator(
     estimator = lr,
     estimatorParamMaps = paramGrid,
     evaluator= binaryEvaluator,
@@ -61,130 +63,221 @@ cv = CrossValidator(
     parallelism = 4
 )
 
+
+from pyspark.ml.classification import RandomForestClassifier
+
+rf = RandomForestClassifier(featuresCol="features", labelCol="Survived")
+paramGrid_rf = ParamGridBuilder() \
+    .addGrid(rf.numTrees, [20, 50, 100]) \
+    .addGrid(rf.maxDepth, [5, 10]) \
+    .build()
+
+cv_rf = CrossValidator(
+    estimator=rf,
+    estimatorParamMaps=paramGrid_rf,
+    evaluator=binaryEvaluator,
+    numFolds=5,
+    parallelism=4
+)
+
+from pyspark.ml.classification import DecisionTreeClassifier
+
+dt = DecisionTreeClassifier(featuresCol="features", labelCol="Survived")
+paramGrid_dt = ParamGridBuilder() \
+    .addGrid(dt.maxDepth, [3, 5, 10]) \
+    .addGrid(dt.minInstancesPerNode, [1, 5, 10]) \
+    .build()
+
+cv_dt = CrossValidator(
+    estimator=dt,
+    estimatorParamMaps=paramGrid_dt,
+    evaluator=binaryEvaluator,
+    numFolds=5,
+    parallelism=4
+)
+
+from pyspark.ml.classification import GBTClassifier
+
+gbt = GBTClassifier(featuresCol="features", labelCol="Survived")
+paramGrid_gbt = ParamGridBuilder() \
+    .addGrid(gbt.maxIter, [20, 50]) \
+    .addGrid(gbt.maxDepth, [3, 5]) \
+    .build()
+
+cv_gbt = CrossValidator(
+    estimator=gbt,
+    estimatorParamMaps=paramGrid_gbt,
+    evaluator=binaryEvaluator,
+    numFolds=5,
+    parallelism=4
+)
+
+
+
 mlflow.set_experiment("Titanic-Project")
 
 
-mlflow.set_registry_uri(mlruns_path)
-model_name ="TitanicLogisticRegression"
-with mlflow.start_run(run_name="LogisticRegression"):
-    
 
-    cvModel = cv.fit(train_df)
+all_results = []
+for algo_name, cv, model_name in [
+    ("LogisticRegression", cv_lr, "TitanicLogisticRegression"),
+    ("RandomForest", cv_rf, "TitanicRandomForest"),
+    ("DecisionTree", cv_dt, "TitanicDecisionTree"),
+    ("GBT", cv_gbt, "TitanicGBT")
+]:
 
-    bestModel = cvModel.bestModel
-    
-    params = bestModel.extractParamMap()
-    for p,v in params.items():
-        mlflow.log_param(str(p.name), v)
-    
-    print("Best Params: ", bestModel._java_obj.parent().extractParamMap())
+    with mlflow.start_run(run_name=algo_name):
+        cvModel = cv.fit(train_df)
 
-    predictions = bestModel.transform(val_df)
-    auc = binaryEvaluator.evaluate(predictions)
-    mlflow.log_metric("Test_AUC", auc)
-    
-    accuracy_val = evaluator.setMetricName("accuracy").evaluate(predictions)
-    precision_val = evaluator.setMetricName("precisionByLabel").evaluate(predictions)
-    recall_val = evaluator.setMetricName("recallByLabel").evaluate(predictions)
-    f1_val = evaluator.setMetricName("f1").evaluate(predictions)
-    
-    print("Accuracy: ",accuracy_val)
-    print("Precision: ", precision_val)
-    print("Recall: ",recall_val)
-    print("F1-score: ", f1_val)
-    
-    mlflow.log_metric("Accuracy",accuracy_val)
-    mlflow.log_metric("Precision",precision_val)
-    mlflow.log_metric("Recall",recall_val)
-    mlflow.log_metric("F1-score",f1_val)
-    
-    #saving confusion_matrix and log artifact
-    y_true = [int(row['Survived']) for row in predictions.select("Survived").collect()]
-    y_pred = [int(row['prediction']) for row in predictions.select('prediction').collect()]
-    
-    
-    cm = confusion_matrix(y_true, y_pred)
-    plt.figure(figsize=(6,4))
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",xticklabels=["Died", "Survived"], yticklabels=["Died", "Survived"])
-    plt.xlabel("Predicted")
-    plt.ylabel("Actual")
-    plt.title("Confusion Matrix")
-    plt.savefig("confusion_matrix.png")
-    mlflow.log_artifact("confusion_matrix.png")
-    
-    #saving feature importance and save artifacts
-    coef = bestModel.coefficients.toArray()
-    sample_features = val_df.select("features").first()["features"]
-    feature_count = len(sample_features)
-    feature_names = [f"feature_{i}" for i in range(feature_count)]
-    coef_df = pd.DataFrame({'Feature': feature_names, 'coefficient': coef})
-    
-    coef_df_sorted = coef_df.reindex(coef_df.coefficient.abs().sort_values(ascending=False).index)
-    
-    top_n = 10
-    coef_df_top = coef_df_sorted.head(top_n)
-    plt.figure(figsize=(12,6))
-    sns.barplot(x='coefficient', y='Feature', data=coef_df_top)
-    plt.title('Logistic Regression Feature Importance')
-    plt.tight_layout()
-    plt.savefig('feature_importance.png')
-    mlflow.log_artifact('feature_importance.png')
-
-
-    print("BEST PARAMS: ", {p.name: v for p,v in params.items()})
-    print("Test AUC = ", auc)
+        bestModel = cvModel.bestModel
         
-    #best model
-    mlflow.spark.log_model(bestModel, artifact_path = "model", registered_model_name=model_name)
-    
-    
-    sample_features = val_df.select("features").first()["features"]
-    input_example = pd.DataFrame([sample_features.toArray()], 
-                                columns=[f"feature_{i}" for i in range(len(sample_features))])
+        params = bestModel.extractParamMap()
+        for p,v in params.items():
+            mlflow.log_param(str(p.name), v)
         
-    
-    #register the model in the registry
-    model_uri = f"runs:/{mlflow.active_run().info.run_id}/model"
-    registered_model = mlflow.register_model(model_uri, model_name)
-    print(f"Registered Model Version: {registered_model.version}")
+        print("Best Params: ", bestModel._java_obj.parent().extractParamMap())
 
-    client = MlflowClient()
-    client.transition_model_version_stage(
-        name=model_name,
-        version=registered_model.version,
-        stage = "Staging", # or can be set to "Production"
-        archive_existing_versions = True
-    )
-    client.set_model_version_tag(name=model_name,
-                             version=registered_model.version,
-                             key="AUC",
-                             value=str(auc))
-
-    prod_model = client.get_latest_versions(name=model_name, stages=["Production"])
-    if prod_model:
-        prod_run_id = prod_model[0].run_id
-        prod_metrics = client.get_run(prod_run_id).data.metrics
-        current_prod_auc = prod_metrics.get("Test_AUC",0)
+        predictions = bestModel.transform(val_df)
+        auc = binaryEvaluator.evaluate(predictions)
+        mlflow.log_metric("Test_AUC", auc)
         
-        if auc > current_prod_auc:
-            print(f"New model AUC {auc:.4f} > Production AUC {current_prod_auc:.4f} So promoting to Production")
-            client.transition_model_version_stage(
-                name=model_name,
-                version = registered_model.version,
-                stage="Production",
-                archive_existing_versions=True
-            )
+        accuracy_val = evaluator.setMetricName("accuracy").evaluate(predictions)
+        precision_val = evaluator.setMetricName("precisionByLabel").evaluate(predictions)
+        recall_val = evaluator.setMetricName("recallByLabel").evaluate(predictions)
+        f1_val = evaluator.setMetricName("f1").evaluate(predictions)
+        
+        print("Accuracy: ",accuracy_val)
+        print("Precision: ", precision_val)
+        print("Recall: ",recall_val)
+        print("F1-score: ", f1_val)
+        
+        mlflow.log_metric("Accuracy",accuracy_val)
+        mlflow.log_metric("Precision",precision_val)
+        mlflow.log_metric("Recall",recall_val)
+        mlflow.log_metric("F1-score",f1_val)
+        
+        #saving confusion_matrix and log artifact
+        y_true = [int(row['Survived']) for row in predictions.select("Survived").collect()]
+        y_pred = [int(row['prediction']) for row in predictions.select('prediction').collect()]
+        
+        
+        cm = confusion_matrix(y_true, y_pred)
+        plt.figure(figsize=(6,4))
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",xticklabels=["Died", "Survived"], yticklabels=["Died", "Survived"])
+        plt.xlabel("Predicted")
+        plt.ylabel("Actual")
+        plt.title("Confusion Matrix")
+        plt.savefig("confusion_matrix.png")
+        mlflow.log_artifact("confusion_matrix.png")
+        
+        #saving feature importance and save artifacts
+        if hasattr(bestModel, "coefficients"):
+            coef = bestModel.coefficients.toArray()
+            sample_features = val_df.select("features").first()["features"]
+            feature_count = len(sample_features)
+            feature_names = [f"feature_{i}" for i in range(feature_count)]
+            coef_df = pd.DataFrame({'Feature': feature_names, 'coefficient': coef})
             
-        else:
-            print(f"New model AUC {auc:.4f} <= Production AUC {current_prod_auc:.4f} So keeping in Staging")
-    else:
-        #no production model exist, promote directly
-        print("No Production model found So promoting new model to Production")
+            coef_df_sorted = coef_df.reindex(coef_df.coefficient.abs().sort_values(ascending=False).index)
+            
+            top_n = 10
+            coef_df_top = coef_df_sorted.head(top_n)
+            plt.figure(figsize=(12,6))
+            sns.barplot(x='coefficient', y='Feature', data=coef_df_top)
+            plt.title('Logistic Regression Feature Importance')
+            plt.tight_layout()
+            plt.savefig('feature_importance.png')
+            mlflow.log_artifact('feature_importance.png')
+            
+        elif hasattr(bestModel, "featureImportances"):
+            importances = np.array(bestModel.featureImportances)
+            sample_features = val_df.select("features").first()["features"]
+            feature_count = len(sample_features)
+            feature_names = [f"feature_{i}" for i in range(feature_count)]
+            coef_df = pd.DataFrame({'Feature': feature_names, 'importance': importances})
+            coef_df_sorted = coef_df.reindex(coef_df.importance.abs().sort_values(ascending=False).index)
+            top_n = 10
+            coef_df_top = coef_df_sorted.head(top_n)
+            plt.figure(figsize=(12,6))
+            sns.barplot(x="importance", y="Feature", data=coef_df_top)
+            plt.title(f"{algo_name} Feature Importance")
+            plt.tight_layout()
+            plt.savefig("feature_importance.png")
+            mlflow.log_artifact("feature_importance.png")
+
+
+        print("BEST PARAMS: ", {p.name: v for p,v in params.items()})
+        print("Test AUC = ", auc)
+            
+        #best model
+        mlflow.spark.log_model(bestModel, artifact_path = "model", registered_model_name=model_name)
+        
+        
+        sample_features = val_df.select("features").first()["features"]
+        input_example = pd.DataFrame([sample_features.toArray()], 
+                                    columns=[f"feature_{i}" for i in range(len(sample_features))])
+            
+        
+        #register the model in the registry
+        model_uri = f"runs:/{mlflow.active_run().info.run_id}/model"
+        registered_model = mlflow.register_model(model_uri, model_name)
+        print(f"Registered Model Version: {registered_model.version}")
+
+
+        all_results.append({"model_name": model_name, "auc": auc, "run_id": mlflow.active_run().info.run_id, "model": bestModel})
+        
+        
+
+# Find the best model
+best_entry = max(all_results, key=lambda x: x["auc"])
+best_model_name = best_entry["model_name"]
+best_run_id = best_entry["run_id"]
+best_model = best_entry["model"]
+
+# Register and promote only the best model
+model_uri = f"runs:/{best_run_id}/model"
+registered_model = mlflow.register_model(model_uri, best_model_name)
+
+
+
+#MOdel Production
+client = MlflowClient()
+client.transition_model_version_stage(
+    name=best_model_name,
+    version=registered_model.version,
+    stage = "Staging", # or can be set to "Production"
+    archive_existing_versions = True
+)
+client.set_model_version_tag(name=best_model_name,
+                        version=registered_model.version,
+                        key="AUC",
+                        value=str(auc))
+
+prod_model = client.get_latest_versions(name=best_model_name, stages=["Production"])
+if prod_model:
+    prod_run_id = prod_model[0].run_id
+    prod_metrics = client.get_run(prod_run_id).data.metrics
+    current_prod_auc = prod_metrics.get("Test_AUC",0)
+    
+    if auc > current_prod_auc:
+        print(f"New model AUC {auc:.4f} > Production AUC {current_prod_auc:.4f} So promoting to Production")
         client.transition_model_version_stage(
-            name = model_name,
+            name=best_model_name,
             version = registered_model.version,
-            stage = "Production",
+            stage="Production",
+            archive_existing_versions=True
         )
         
+    else:
+        print(f"New model AUC {auc:.4f} <= Production AUC {current_prod_auc:.4f} So keeping in Staging")
+else:
+    #no production model exist, promote directly
+    print("No Production model found So promoting new model to Production")
+    client.transition_model_version_stage(
+        name = best_model_name,
+        version = registered_model.version,
+        stage = "Production",
+    )
+            
         
 spark.stop()

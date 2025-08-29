@@ -78,7 +78,7 @@ processed_val = pipeline_model.transform(val_df) \
 
 processed_val.write.mode("overwrite").option("header",True).parquet("data/processed/val_features.parquet")
 
-pipeline_model.write().overwrite().save("models/preprocessing_pipeline")
+pipeline_model.write().overwrite().save("pipeline/preprocessing_pipeline")
 
 print("train_features.parquet Saved Successfully")
 print("test_features.parquet Saved Successfully")

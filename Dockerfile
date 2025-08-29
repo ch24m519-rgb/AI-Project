@@ -34,7 +34,7 @@ ENV MLFLOW_TRACKING_URI=file:///app/mlruns
 
 WORKDIR /app
 COPY src/ src/
-COPY models/ models/
+COPY pipeline/ pipeline/
 
 COPY data/raw/ data/raw/
 COPY data/processed/ data/processed/

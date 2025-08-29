@@ -1,7 +1,7 @@
 import requests
 import json
 
-url = "http://localhost:5000/predict"
+url = "http://localhost:5050/predict"
 
 data = {
     "PassengerId": 893,
